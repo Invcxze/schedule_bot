@@ -1,0 +1,31 @@
+timezone = "Europe/Moscow"
+poll_interval_seconds = 1800
+cache_ttl_seconds = 60
+# Every day at this local time, chats that ran /morning on get today+tomorrow.
+morning_digest_time = "08:00"
+database_path = "data/bot.sqlite3"
+# Restrict changing a group's subscription to Telegram chat administrators.
+group_admins_only = true
+
+[source]
+# Exactly one: local_file OR google_sheet_url. If GOOGLE_SHEET_URL is set in
+# .env, it takes priority and local_file is ignored.
+local_file = "/Users/vladhramenko/Downloads/Core Courses Fall 2026.xlsx"
+# google_sheet_url = "https://docs.google.com/spreadsheets/d/REPLACE_ME/edit"
+# Optional: use Drive API + service account instead of public XLSX export.
+# Credentials path is read from GOOGLE_APPLICATION_CREDENTIALS.
+private_google_sheet = false
+
+[parser]
+# Explicit allowlist: NEVER mix archive copies and different semester blocks.
+# A group present on more than one listed sheet is merged (union of lessons),
+# not rejected — some groups have core courses on one sheet and
+# program-specific electives on another (e.g. "1st block common" + "Ru Programs").
+sheet_names = ["1st block common", "Ru Programs"]
+header_row = 2
+lesson_rows = 3
+# Whole-cell group pattern, not a substring search. The count in brackets is ignored.
+group_pattern = '^(?:[BM]\d{2}-[A-Z0-9]+-\d{2}|PHD)$'
+# Optional date boundaries for the selected weekly block (inclusive).
+# valid_from = "2026-08-31"
+# valid_until = "2026-10-20"

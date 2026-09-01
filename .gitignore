@@ -1,0 +1,13 @@
+.venv/
+.env
+config.toml
+data/
+credentials*.json
+service-account*.json
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.DS_Store

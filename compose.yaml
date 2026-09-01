@@ -1,0 +1,53 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    volumes:
+      - redis-data:/data
+
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+      - bot-data:/app/data
+      # For local Excel, add its mount and set source.local_file to /app/schedule.xlsx:
+      # - /absolute/path/schedule.xlsx:/app/schedule.xlsx:ro
+      # Private Google Sheet: also mount your service-account file read-only.
+
+  # Refresh, change notifications, and the morning digest all run here — the
+  # `bot` service above only handles interactive commands. Embedded beat (-B)
+  # is fine for a single instance; do not scale this service beyond one replica
+  # (Celery Beat would schedule duplicate ticks and double-send notifications).
+  celery:
+    build: .
+    restart: unless-stopped
+    # --schedule: beat's own bookkeeping file, not the app's data. /app itself is
+    # owned by root (only /app/data is writable by the non-root `bot` user), so
+    # beat's default `./celerybeat-schedule` in the cwd fails with EACCES.
+    command: ["uv", "run", "--no-sync", "celery", "-A", "schedule_bot.celery_app", "worker", "-B",
+              "--schedule=/app/data/celerybeat-schedule", "--loglevel=info"]
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+      - bot-data:/app/data
+
+volumes:
+  bot-data:
+  redis-data:
