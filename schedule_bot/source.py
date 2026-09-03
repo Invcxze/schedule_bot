@@ -101,8 +101,53 @@ class ScheduleService:
         self.schedules: dict[str, GroupSchedule] = {}
         self.loaded_at: datetime | None = None
         self.last_error: str | None = None
+        # Groups kept from the previous successful load because the latest fetch
+        # dropped them or lost some of their day headers (rename, one column/row
+        # mangled). Recomputed fresh on every successful refresh; see _reconcile.
+        self.stale_groups: dict[str, str] = {}
         self._attempt_at = float("-inf")
         self._lock = asyncio.Lock()
+
+    def _reconcile(
+        self, result: dict[str, GroupSchedule]
+    ) -> tuple[dict[str, GroupSchedule], dict[str, str]]:
+        """Isolate damage from a subset of groups instead of blocking everyone.
+
+        A single group renamed, or one column/row mangled, must not freeze
+        notifications for every other group in the workbook — only the affected
+        groups keep last known schedule. A source that looks wholesale broken
+        (most previously known groups affected at once — wrong file, mangled
+        export, pointed at a different semester) still fails hard, same as before.
+        """
+        if not self.schedules:
+            return result, {}
+        missing = set(self.schedules) - set(result)
+        broken = {
+            group
+            for group in self.schedules
+            if group in result and set(self.schedules[group].days) - set(result[group].days)
+        }
+        affected = missing | broken
+        if not affected:
+            return result, {}
+        if len(affected) * 2 > len(self.schedules):
+            raise ParseError(
+                f"Из источника исчезли или сломались {len(affected)} из "
+                f"{len(self.schedules)} групп: " + ", ".join(sorted(affected))
+            )
+        merged = dict(result)
+        stale = {}
+        for group in affected:
+            merged[group] = self.schedules[group]
+            stale[group] = (
+                "исчезла из источника" if group in missing else "исчезли заголовки дней"
+            )
+        log.warning(
+            "Refresh: сохранена прошлая копия для %d групп, проверь переименование/структуру: %s",
+            len(stale),
+            ", ".join(sorted(stale)),
+        )
+        return merged, stale
 
     async def refresh(self, *, force: bool = False) -> dict[str, GroupSchedule]:
         async with self._lock:
@@ -114,15 +159,7 @@ class ScheduleService:
             try:
                 data = await self.source.read()
                 result = await asyncio.to_thread(parse_workbook, data, self.settings.parser)
-                # A missing group is not a mass cancellation. Keep the entire previous dataset.
-                missing = set(self.schedules) - set(result)
-                if missing:
-                    raise ParseError("Из источника исчезли группы: " + ", ".join(sorted(missing)))
-                for group, old in self.schedules.items():
-                    if set(old.days) - set(result[group].days):
-                        raise ParseError(
-                            f"Из сетки {group} исчезли заголовки дней. Проверь структуру."
-                        )
+                result, stale = self._reconcile(result)
             except Exception as exc:
                 self.last_error = (
                     str(exc)
@@ -134,6 +171,7 @@ class ScheduleService:
                     raise SourceError(self.last_error) from exc
                 return self.schedules
             self.schedules = result
+            self.stale_groups = stale
             self.loaded_at = datetime.now(UTC)
             self.last_error = None
             return result

@@ -11,10 +11,11 @@ LANGUAGES = ("ru", "en")
 _HELP_RU = """Привет! Покажу расписание группы и сообщу об изменениях.
 
 /group B26-CSE-01 — выбрать группу и включить отслеживание
+/group — без названия: тот же список групп кнопками
 /today [группа] — сегодня
 /tomorrow [группа] — завтра
 /all [группа] — всё расписание
-/groups [часть названия] — доступные группы
+/groups [часть названия] — список групп кнопками (можно сузить поиском)
 /subscribe — включить уведомления для выбранной группы
 /unsubscribe — отключить уведомления
 /morning on|off — утренняя рассылка сегодня+завтра в {digest_time}
@@ -23,7 +24,8 @@ _HELP_RU = """Привет! Покажу расписание группы и с
 /status — группа, подписка и время загрузки
 
 Группу, рассылку и язык может менять только администратор беседы (в ЛС — сам
-пользователь). В ЛС можно просто отправить название группы. В беседе — полной командой:
+пользователь) — это касается и кнопок в списке групп, не только /group с названием.
+В ЛС можно просто отправить название группы. В беседе — полной командой:
 /group@имя_бота B26-CSE-01
 Команды просмотра доступны всем; чужая группа в /today не меняет подписку.
 В темах форума настройки отдельные. Проверка каждые 30 минут, сообщения — только о правках.
@@ -33,10 +35,11 @@ _HELP_RU = """Привет! Покажу расписание группы и с
 _HELP_EN = """Hi! I show a group's class schedule and tell you when it changes.
 
 /group B26-CSE-01 — pick a group and turn on tracking
+/group — no name: the same group list as buttons, tap to pick
 /today [group] — today
 /tomorrow [group] — tomorrow
 /all [group] — the full schedule
-/groups [part of a name] — list available groups
+/groups [part of a name] — group list as buttons (narrow it down with a search)
 /subscribe — turn notifications back on for the saved group
 /unsubscribe — turn notifications off
 /morning on|off — daily today+tomorrow digest at {digest_time}
@@ -45,7 +48,8 @@ _HELP_EN = """Hi! I show a group's class schedule and tell you when it changes.
 /status — group, subscription and last-load status
 
 Only a group admin can change the group, digest, or language here (in a DM,
-that's just you). In a DM you can just send the group name as plain text. In a
+that's just you) — that includes tapping a group button, not just /group with
+a name. In a DM you can just send the group name as plain text. In a
 group chat, use the full command:
 /group@bot_username B26-CSE-01
 Viewing commands work for everyone; looking up another group with /today does
@@ -97,6 +101,10 @@ _STRINGS: dict[str, dict[str, object]] = {
         "source_error_cached": "⚠️ Источник недоступен. Показываю последнюю копию от {stamp}.",
         "select_group_first": "Сначала выбери группу: /group B26-CSE-01. Список: /groups",
         "group_not_found": "Группа {name} не найдена на выбранных листах.",
+        "group_stale": (
+            "⚠️ Эта группа пропала из последней загрузки источника (возможно, переименована "
+            "или структура таблицы изменилась). Показываю последнюю известную версию."
+        ),
         "similar_groups": "\nПохожие: {list}",
         "see_groups_list": "\nСписок: /groups",
         "specify_group": "Укажи группу: /group B26-CSE-01. Доступные группы: /groups",
@@ -136,6 +144,9 @@ _STRINGS: dict[str, dict[str, object]] = {
         "status_not_selected": "не выбрана",
         "status_never_loaded": "ещё не загружено после запуска",
         "status_source_error": "ошибка — сохранена предыдущая копия",
+        "status_source_degraded": (
+            "OK, но не обновились {count} групп(ы) — возможно, переименование"
+        ),
         "status_source_ok": "OK",
         "unknown_command": "Неизвестная команда. Список: /help",
         "generic_error": "Не удалось обработать запрос. Попробуй ещё раз.",
@@ -143,6 +154,11 @@ _STRINGS: dict[str, dict[str, object]] = {
         "groups_title": "Доступные группы",
         "language_usage": "Выбери язык: /language ru или /language en. Сейчас: {current}.",
         "language_set": "Язык переключён на {name}.",
+        "log_not_configured": "Команда /log не настроена: не задан owner_user_id.",
+        "log_owner_only": "Команда /log доступна только владельцу бота.",
+        "log_invalid_count": "Укажи число строк, например /log 100.",
+        "log_empty": "Логов пока нет.",
+        "log_title": "Последние строки лога ({count})",
     },
     "en": {
         "language_name_ru": "Russian",
@@ -187,6 +203,10 @@ _STRINGS: dict[str, dict[str, object]] = {
         "source_error_cached": "⚠️ Source unavailable. Showing the last good copy from {stamp}.",
         "select_group_first": "Pick a group first: /group B26-CSE-01. List: /groups",
         "group_not_found": "Group {name} was not found on the configured sheets.",
+        "group_stale": (
+            "⚠️ This group is missing from the latest source load (maybe renamed, or the "
+            "sheet structure changed). Showing the last known version."
+        ),
         "similar_groups": "\nSimilar: {list}",
         "see_groups_list": "\nList: /groups",
         "specify_group": "Specify a group: /group B26-CSE-01. Available groups: /groups",
@@ -226,6 +246,7 @@ _STRINGS: dict[str, dict[str, object]] = {
         "status_not_selected": "none selected",
         "status_never_loaded": "not loaded yet since startup",
         "status_source_error": "error — showing the last good copy",
+        "status_source_degraded": "OK, but {count} group(s) failed to refresh — possibly renamed",
         "status_source_ok": "OK",
         "unknown_command": "Unknown command. See /help",
         "generic_error": "Couldn't process that. Please try again.",
@@ -233,6 +254,11 @@ _STRINGS: dict[str, dict[str, object]] = {
         "groups_title": "Available groups",
         "language_usage": "Choose a language: /language ru or /language en. Current: {current}.",
         "language_set": "Language switched to {name}.",
+        "log_not_configured": "/log isn't configured: owner_user_id isn't set.",
+        "log_owner_only": "/log is only available to the bot owner.",
+        "log_invalid_count": "Give a line count, e.g. /log 100.",
+        "log_empty": "No logs yet.",
+        "log_title": "Latest log lines ({count})",
     },
 }
 

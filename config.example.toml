@@ -6,6 +6,10 @@ morning_digest_time = "08:00"
 database_path = "data/bot.sqlite3"
 # Restrict changing a group's subscription to Telegram chat administrators.
 group_admins_only = true
+# Telegram user ID allowed to run /log (tails data/bot.log + data/celery.log).
+# Unset by default: /log stays disabled until someone is granted it. Can also
+# be set via OWNER_USER_ID in .env, which takes priority over this value.
+# owner_user_id = 123456789
 
 [source]
 # Exactly one: local_file OR google_sheet_url. If GOOGLE_SHEET_URL is set in

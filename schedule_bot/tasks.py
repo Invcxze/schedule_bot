@@ -59,7 +59,19 @@ async def send_morning_digest(
     service: ScheduleService, store: Store, sender: Sender, now: datetime, default_time
 ) -> int:
     """Queue today+tomorrow for every chat with /morning on whose chosen time (or the
-    server-wide default) has passed for today, and deliver it."""
+    server-wide default) has passed for today, and deliver it.
+
+    digest_due() is checked first, before touching the source at all: this task
+    fires every minute (see celery_app.py's beat_schedule), and service.refresh()
+    only skips a real network fetch inside its own cache_ttl window. With
+    cache_ttl_seconds commonly close to that same 60s tick, skipping the source
+    entirely on the (usual) minute where nobody's time has arrived yet is what
+    actually keeps this cheap, rather than a live Google Sheets fetch every
+    1-2 minutes all day regardless of poll_interval_seconds.
+    """
+    if not store.digest_due(now, default_time):
+        await drain_outbox(store, sender)  # still worth retrying anything already queued
+        return 0
     try:
         schedules = await service.refresh()  # cache_ttl-bounded: usually just-refreshed data.
     except SourceError as exc:

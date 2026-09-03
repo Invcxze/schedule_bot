@@ -188,6 +188,32 @@ def test_morning_digest_is_opt_in_daily_and_respects_custom_time(tmp_path):
     store.close()
 
 
+def test_digest_due_agrees_with_collect_digests_without_fetching_schedules(tmp_path):
+    """digest_due is the cheap precheck send_morning_digest runs before ever
+    touching the source (see tasks.py) — it must call "due" exactly when
+    collect_digests would actually queue something, using only SQLite state."""
+    store = Store(tmp_path / "db")
+    first = schedule()
+    store.subscribe(1, 0, first)
+    default_time = time(8, 0)
+
+    def now_at(hour, minute):
+        return datetime(2026, 8, 31, hour, minute)  # Monday 2026-08-31
+
+    # Not opted in: never due, no matter the time.
+    assert store.digest_due(now_at(9, 0), default_time) is False
+
+    store.set_digest(1, 0, True)
+    # Before the default time: not due yet today.
+    assert store.digest_due(now_at(7, 0), default_time) is False
+    assert store.digest_due(now_at(8, 0), default_time) is True
+
+    # Actually sending it clears the due flag for the rest of the day.
+    assert store.collect_digests({first.group: first}, now_at(8, 0), default_time) == 1
+    assert store.digest_due(now_at(9, 0), default_time) is False
+    store.close()
+
+
 def test_long_notification_resumes_at_unsent_part(tmp_path):
     store = Store(tmp_path / "db")
     first = schedule()
