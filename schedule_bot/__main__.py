@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from .bot import create_router
 from .config import load_settings
 from .formatting import format_all, format_date
+from .logs import attach_file_handler, log_file
 from .models import normalize_group
 from .monitor import Sender
 from .source import ScheduleService, Source
@@ -104,6 +105,10 @@ def main():
     )
     try:
         settings = load_settings(args.config, need_token=args.mode == "run")
+        if args.mode == "run":
+            # Console output stays (docker/journal); also spool to a small rotating
+            # file so /log can tail it from inside the running bot process.
+            attach_file_handler(logging.getLogger(), log_file(settings.database_path, "bot"))
         asyncio.run(inspect_source(settings, args) if args.mode == "check" else run(settings))
     except KeyboardInterrupt:
         pass

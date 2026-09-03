@@ -27,6 +27,7 @@ class Settings:
     redis_url: str
     database_path: Path
     group_admins_only: bool
+    owner_user_id: int | None
     local_file: Path | None
     google_sheet_id: str | None
     private_google_sheet: bool
@@ -99,6 +100,14 @@ def load_settings(path: Path, *, need_token: bool = True) -> Settings:
             "Для закрытой Google-таблицы нужны ссылка и GOOGLE_APPLICATION_CREDENTIALS."
         )
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0").strip()
+    # Env takes priority, same as GOOGLE_SHEET_URL/REDIS_URL: keeps the one Telegram
+    # user ID allowed to run /log out of the (possibly shared/committed-example) TOML.
+    owner_env = os.environ.get("OWNER_USER_ID", "").strip()
+    owner_raw = owner_env or raw.get("owner_user_id")
+    try:
+        owner_user_id = int(owner_raw) if owner_raw not in (None, "") else None
+    except (TypeError, ValueError) as exc:
+        raise ValueError("owner_user_id должен быть числовым Telegram user ID.") from exc
     return Settings(
         token,
         ZoneInfo(raw.get("timezone", "Europe/Moscow")),
@@ -108,6 +117,7 @@ def load_settings(path: Path, *, need_token: bool = True) -> Settings:
         redis_url,
         resolve(raw.get("database_path", "data/bot.sqlite3")),
         bool(raw.get("group_admins_only", True)),
+        owner_user_id,
         resolve(local) if local else None,
         sheet_id_from_url(url) if url else None,
         private,

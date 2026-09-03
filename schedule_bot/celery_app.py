@@ -9,15 +9,26 @@ import os
 from pathlib import Path
 
 from celery import Celery
+from celery.signals import after_setup_logger, after_setup_task_logger
 from dotenv import load_dotenv
 
 from .config import load_settings
+from .logs import attach_file_handler, log_file
 
 load_dotenv(Path.cwd() / ".env")
 
 _settings = load_settings(
     Path(os.environ.get("BOT_CONFIG", "config.toml")), need_token=False
 )
+
+
+@after_setup_logger.connect
+@after_setup_task_logger.connect
+def _spool_to_shared_log_file(logger=None, **_kwargs):
+    # Same shared data directory as the bot process (see compose.yaml's bot-data
+    # volume): /log, run from the bot process, tails this file too.
+    if logger is not None:
+        attach_file_handler(logger, log_file(_settings.database_path, "celery"))
 
 app = Celery(
     "schedule_bot",

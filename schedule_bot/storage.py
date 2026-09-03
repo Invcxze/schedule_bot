@@ -187,6 +187,21 @@ class Store:
                 )
         return count
 
+    def digest_due(self, now: datetime, default_time: time) -> bool:
+        """Cheap precheck: does any chat's digest time fall due today?
+
+        Same WHERE clause as collect_digests but no fetched schedules needed,
+        so the caller can skip an expensive source refresh entirely on the
+        (usual) minute where nobody's time has arrived yet.
+        """
+        stamp = now.date().isoformat()
+        rows = self.db.execute(
+            "SELECT digest_time FROM subscriptions WHERE enabled=1 AND daily_digest=1 "
+            "AND (digest_date IS NULL OR digest_date<>?)",
+            (stamp,),
+        ).fetchall()
+        return any(now.time() >= (_parse_hhmm(row["digest_time"]) or default_time) for row in rows)
+
     def collect_digests(
         self, schedules: dict[str, GroupSchedule], now: datetime, default_time: time
     ) -> int:
