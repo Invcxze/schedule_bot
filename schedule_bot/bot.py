@@ -2,6 +2,7 @@ import logging
 import re
 import sqlite3
 from datetime import datetime, timedelta
+from html import escape
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatMemberStatus, ChatType
@@ -18,6 +19,7 @@ from aiogram.types import (
 )
 
 from .config import Settings
+from .contacts import ContactBook, format_contacts
 from .formatting import format_all, format_date, split_text
 from .i18n import DEFAULT_LANGUAGE, LANGUAGES, normalize_language, t
 from .logs import log_file
@@ -109,7 +111,11 @@ def groups_page(
 
 
 def create_router(
-    settings: Settings, service: ScheduleService, store: Store, sender: Sender
+    settings: Settings,
+    service: ScheduleService,
+    store: Store,
+    sender: Sender,
+    contacts: ContactBook | None = None,
 ) -> Router:
     router = Router()
 
@@ -348,6 +354,35 @@ def create_router(
                 tz=settings.timezone,
             ),
         )
+
+    @router.message(Command("contacts"))
+    async def contacts_handler(message: Message, command: CommandObject):
+        lang = lang_of(message)
+        if contacts is None or not contacts.all():
+            await answer(message, t(lang, "contacts_not_configured"))
+            return
+        arg = (command.args or "").strip()
+        if arg and not re.fullmatch(settings.parser.group_pattern, normalize_group(arg)):
+            # Not a group name: search contacts by name/alias/course instead.
+            found = contacts.search(arg)
+            if found:
+                await answer(message, format_contacts(found, scope=arg, lang=lang), html=True)
+            else:
+                await answer(message, t(lang, "contacts_none_found", query=arg))
+            return
+        schedule = await find(message, arg or None)
+        if schedule is None:
+            return
+        found, missing = contacts.for_schedule(schedule)
+        if not found:
+            names = escape(", ".join(missing))
+            text = t(lang, "contacts_none_for_group", group=schedule.group)
+            if missing:
+                text += "\n" + t(lang, "contacts_missing", names=names)
+            await answer(message, text, html=True)
+            return
+        text = format_contacts(found, scope=schedule.group, missing=missing, lang=lang)
+        await answer(message, text, html=True)
 
     @router.message(Command("language", "lang"))
     async def language_handler(message: Message, command: CommandObject, bot: Bot):

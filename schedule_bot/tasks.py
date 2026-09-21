@@ -19,7 +19,7 @@ from aiogram import Bot
 from .celery_app import app
 from .config import Settings, load_settings
 from .monitor import Sender, drain_outbox
-from .source import ScheduleService, Source, SourceError
+from .source import CachedSchedules, ScheduleService, Source, SourceError
 from .storage import Store
 
 log = logging.getLogger(__name__)
@@ -33,6 +33,16 @@ _services: dict[Path, ScheduleService] = {}
 
 def load_task_settings() -> Settings:
     return load_settings(Path(os.environ.get("BOT_CONFIG", "config.toml")))
+
+
+def prime_service(service: ScheduleService, store: Store) -> None:
+    """After a worker restart the in-memory service has no previous fetch, so the
+    partial-breakage check in ScheduleService._reconcile would have nothing to
+    compare against. Seed it from the last cached copy."""
+    if service.schedules:
+        return
+    parser = service.settings.parser
+    service.schedules = store.load_schedules(parser.valid_from, parser.valid_until)
 
 
 def get_service(settings: Settings) -> ScheduleService:
@@ -49,7 +59,10 @@ async def refresh_and_notify(service: ScheduleService, store: Store, sender: Sen
         schedules = await service.refresh(force=True)
     except SourceError as exc:
         log.warning("Scheduled refresh failed: %s", exc)
+        store.save_refresh_error(str(exc))
         return 0
+    # Publish the parsed result for the bot process (see source.CachedSchedules).
+    store.save_schedules(schedules, service.stale_groups, service.loaded_at)
     changed = store.collect_changes(schedules)
     await drain_outbox(store, sender)
     return changed
@@ -62,12 +75,10 @@ async def send_morning_digest(
     server-wide default) has passed for today, and deliver it.
 
     digest_due() is checked first, before touching the source at all: this task
-    fires every minute (see celery_app.py's beat_schedule), and service.refresh()
-    only skips a real network fetch inside its own cache_ttl window. With
-    cache_ttl_seconds commonly close to that same 60s tick, skipping the source
-    entirely on the (usual) minute where nobody's time has arrived yet is what
-    actually keeps this cheap, rather than a live Google Sheets fetch every
-    1-2 minutes all day regardless of poll_interval_seconds.
+    fires every minute (see celery_app.py's beat_schedule); the task passes a
+    CachedSchedules, so even a due run reads the stored copy rather than the source.
+    The early digest_due() exit still saves the (cheap, but pointless) cache read
+    on the usual minute where nobody's time has arrived yet.
     """
     if not store.digest_due(now, default_time):
         await drain_outbox(store, sender)  # still worth retrying anything already queued
@@ -101,7 +112,9 @@ async def _with_store_and_bot(body) -> None:
 @app.task(name="schedule_bot.refresh_schedule")
 def refresh_schedule_task() -> None:
     async def body(settings, store, sender):
-        changed = await refresh_and_notify(get_service(settings), store, sender)
+        service = get_service(settings)
+        prime_service(service, store)
+        changed = await refresh_and_notify(service, store, sender)
         if changed:
             log.info("Queued %d changed day(s)", changed)
 
@@ -112,8 +125,10 @@ def refresh_schedule_task() -> None:
 def send_morning_digest_task() -> None:
     async def body(settings, store, sender):
         now = datetime.now(settings.timezone)
+        # Read the cached copy the refresh task keeps current, not the source itself.
+        service = CachedSchedules(store, settings, get_service(settings))
         queued = await send_morning_digest(
-            get_service(settings), store, sender, now, settings.morning_digest_time
+            service, store, sender, now, settings.morning_digest_time
         )
         if queued:
             log.info("Queued morning digest for %d chat(s)", queued)

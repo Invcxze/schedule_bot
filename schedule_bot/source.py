@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import time
 from datetime import UTC, datetime
@@ -8,6 +9,7 @@ import aiohttp
 from .config import Settings
 from .models import GroupSchedule
 from .parser import MAX_XLSX_BYTES, ParseError, parse_workbook
+from .storage import Store
 
 log = logging.getLogger(__name__)
 
@@ -175,3 +177,51 @@ class ScheduleService:
             self.loaded_at = datetime.now(UTC)
             self.last_error = None
             return result
+
+
+class CachedSchedules:
+    """Read side of the shared schedule cache, for the bot and the morning digest.
+
+    The Celery worker is the only regular fetcher: it downloads and parses the
+    source every poll_interval and stores the result (Store.save_schedules).
+    This class serves that stored copy, so answering a command costs one small
+    SQLite query instead of a download plus an openpyxl parse. The payload is
+    re-decoded only when the worker has written a newer one.
+
+    If nothing has ever been cached (first start, worker not running), it falls
+    back to one live fetch through `fallback` and caches the result itself.
+    Same attributes as ScheduleService, so callers don't care which they hold.
+    """
+
+    def __init__(self, store: Store, settings: Settings, fallback: ScheduleService):
+        self.store = store
+        self.settings = settings
+        self.fallback = fallback
+        self.schedules: dict[str, GroupSchedule] = {}
+        self.loaded_at: datetime | None = None
+        self.last_error: str | None = None
+        self.stale_groups: dict[str, str] = {}
+        self._stamp: str | None = None
+
+    async def refresh(self) -> dict[str, GroupSchedule]:
+        state = self.store.cache_state()
+        if state is None or state["loaded_at"] is None:
+            return await self._fetch_live()
+        if state["loaded_at"] != self._stamp:
+            parser = self.settings.parser
+            self.schedules = self.store.load_schedules(parser.valid_from, parser.valid_until)
+            self.loaded_at = datetime.fromisoformat(state["loaded_at"])
+            self._stamp = state["loaded_at"]
+        self.stale_groups = json.loads(state["stale_groups"])
+        self.last_error = state["last_error"]
+        return self.schedules
+
+    async def _fetch_live(self) -> dict[str, GroupSchedule]:
+        schedules = await self.fallback.refresh()
+        self.store.save_schedules(schedules, self.fallback.stale_groups, self.fallback.loaded_at)
+        self.schedules = schedules
+        self.loaded_at = self.fallback.loaded_at
+        self.stale_groups = self.fallback.stale_groups
+        self.last_error = self.fallback.last_error
+        self._stamp = self.loaded_at.isoformat()
+        return schedules

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, time
+from datetime import UTC, datetime, time
 
 from test_storage_monitor import schedule
 
@@ -17,6 +17,9 @@ class FakeSender:
 
 
 class FakeService:
+    stale_groups: dict = {}
+    loaded_at = datetime(2026, 8, 31, 8, 0, tzinfo=UTC)
+
     def __init__(self, current):
         self.current = current
         self.refresh_calls = 0

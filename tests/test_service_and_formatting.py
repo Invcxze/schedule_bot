@@ -6,7 +6,7 @@ import pytest
 from test_parser import fixture_cells, xlsx
 
 from schedule_bot.config import ParserConfig, sheet_id_from_url
-from schedule_bot.formatting import format_all, format_date, split_text
+from schedule_bot.formatting import diff_day, format_all, format_date, format_day, split_text
 from schedule_bot.models import GroupSchedule, Lesson
 from schedule_bot.source import ScheduleService, SourceError
 
@@ -195,3 +195,53 @@ def test_google_url():
     assert (
         sheet_id_from_url("https://docs.google.com/spreadsheets/d/abc_123/edit#gid=0") == "abc_123"
     )
+
+
+def test_changed_day_marks_each_lesson_new_edited_or_cancelled():
+    kept = Lesson("09:00", "10:30", "Math", "Ivanov", "101")
+    edited_old = Lesson("10:40", "12:10", "Physics", "Petrov", "201")
+    dropped = Lesson("12:40", "14:10", "Chemistry", "Sidorov", "301")
+    edited_new = replace(edited_old, room="202", teacher="Smirnov")
+    added = Lesson("14:20", "15:50", "English", "", "")
+
+    entries = dict(diff_day((kept, edited_old, dropped), (kept, edited_new, added)))
+    assert entries[kept] is None
+    assert entries[edited_new] == ("changed", ("field_teacher", "field_room"))
+    assert entries[added] == ("new", ())
+    assert entries[dropped] == ("cancelled", ())
+    # Time order, cancelled lesson kept in its slot rather than dropped from the message.
+    assert [
+        lesson.subject
+        for lesson, _ in diff_day((kept, edited_old, dropped), (kept, edited_new, added))
+    ] == [
+        "Math",
+        "Physics",
+        "Chemistry",
+        "English",
+    ]
+
+    text = format_day(
+        "B26-CSE-01",
+        "w:0",
+        (kept, edited_new, added),
+        changed=True,
+        as_html=True,
+        previous=(kept, edited_old, dropped),
+    )
+    assert "✏️ изменено: преподаватель, аудитория" in text
+    assert "🆕 новая" in text
+    assert "<s>🕒 <code>12:40–14:10</code> · <b>Chemistry</b></s> — ❌ отменена" in text
+    assert "Sidorov" not in text  # A cancelled lesson doesn't list its old teacher/room.
+    # Without `previous` (e.g. /today) nothing is marked.
+    plain = format_day("B26-CSE-01", "w:0", (kept, edited_new, added), as_html=True)
+    assert "изменено" not in plain and "новая" not in plain
+
+
+def test_moved_lesson_is_cancelled_at_old_time_and_new_at_new_time_and_all_cancelled_day():
+    old = Lesson("09:00", "10:30", "Math", "Ivanov", "101")
+    moved = replace(old, start="11:00", end="12:30")
+    entries = diff_day((old,), (moved,))
+    assert entries == [(old, ("cancelled", ())), (moved, ("new", ()))]
+
+    text = format_day("G", "w:0", (), changed=True, as_html=True, previous=(old,), lang="en")
+    assert "No classes" in text and "❌ cancelled" in text

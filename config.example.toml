@@ -4,6 +4,8 @@ cache_ttl_seconds = 60
 # Every day at this local time, chats that ran /morning on get today+tomorrow.
 morning_digest_time = "08:00"
 database_path = "data/bot.sqlite3"
+# Professor/TA contacts for /contacts (see contacts.example.toml). Optional.
+contacts_file = "contacts.toml"
 # Restrict changing a group's subscription to Telegram chat administrators.
 group_admins_only = true
 # Telegram user ID allowed to run /log (tails data/bot.log + data/celery.log).

@@ -33,6 +33,7 @@ class Settings:
     private_google_sheet: bool
     credentials_path: Path | None
     parser: ParserConfig
+    contacts_path: Path
 
 
 def sheet_id_from_url(value: str) -> str:
@@ -123,4 +124,5 @@ def load_settings(path: Path, *, need_token: bool = True) -> Settings:
         private,
         resolve(creds) if creds else None,
         parser_config,
+        resolve(raw.get("contacts_file", "contacts.toml")),
     )

@@ -1,0 +1,25 @@
+# Copy to contacts.toml (next to config.toml) and edit. contacts.toml is git-ignored
+# because it holds personal details. The bot re-reads it when it changes.
+#
+# A contact is shown by /contacts for a group when EITHER
+#   - its name/aliases appear in the "teacher" cell of that group's lessons, OR
+#   - one of its courses appears in a lesson's subject.
+# Matching ignores case, spacing and dots, and is by substring.
+# role: "professor" (default) or "ta".
+
+[[contact]]
+name = "Ivanov Ivan"
+role = "professor"
+# Other spellings used in the schedule sheet, e.g. initials.
+aliases = ["Ivanov I.I.", "Иванов И.И."]
+telegram = "@ivanov_ivan"
+email = "i.ivanov@example.edu"
+phone = "+7 900 000-00-00"
+notes = "Office hours: Wed 15:00, room 305"
+
+[[contact]]
+name = "Petrova Maria"
+role = "ta"
+# A TA is usually not named in the sheet, so attach them by subject.
+courses = ["Calculus", "Linear Algebra"]
+telegram = "@petrova_m"

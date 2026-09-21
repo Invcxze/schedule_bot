@@ -1,12 +1,12 @@
 import json
 import logging
 import sqlite3
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 from .formatting import format_date, format_day, split_text
 from .i18n import DEFAULT_LANGUAGE, normalize_language, t
-from .models import GroupSchedule
+from .models import GroupSchedule, Lesson
 
 
 def _parse_hhmm(value: str | None) -> time | None:
@@ -40,6 +40,15 @@ class Store:
                 subscription_id INTEGER NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
                 parts TEXT NOT NULL,
                 next_part INTEGER NOT NULL DEFAULT 0
+            );
+            -- Parsed schedule shared between processes: the Celery worker writes it after
+            -- each successful fetch, the bot process only reads it (see source.CachedSchedules).
+            CREATE TABLE IF NOT EXISTS schedule_cache (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                loaded_at TEXT,
+                payload TEXT NOT NULL DEFAULT '{}',
+                stale_groups TEXT NOT NULL DEFAULT '{}',
+                last_error TEXT
             );
         """)
         # Added after the initial release: migrate existing databases in place.
@@ -148,6 +157,46 @@ class Store:
             )
             self.db.execute("UPDATE subscriptions SET chat_id=? WHERE chat_id=?", (new_id, old_id))
 
+    def save_schedules(
+        self, schedules: dict[str, GroupSchedule], stale_groups: dict[str, str], loaded_at: datetime
+    ):
+        payload = json.dumps(
+            {name: schedule.to_dict() for name, schedule in schedules.items()}, ensure_ascii=False
+        )
+        with self.db:
+            self.db.execute(
+                "INSERT INTO schedule_cache(id, loaded_at, payload, stale_groups, last_error) "
+                "VALUES (1,?,?,?,NULL) ON CONFLICT(id) DO UPDATE SET loaded_at=excluded.loaded_at, "
+                "payload=excluded.payload, stale_groups=excluded.stale_groups, last_error=NULL",
+                (loaded_at.isoformat(), payload, json.dumps(stale_groups, ensure_ascii=False)),
+            )
+
+    def save_refresh_error(self, message: str):
+        """A failed fetch keeps the last good payload and only records why it is old."""
+        with self.db:
+            self.db.execute(
+                "INSERT INTO schedule_cache(id, last_error) VALUES (1,?) "
+                "ON CONFLICT(id) DO UPDATE SET last_error=excluded.last_error",
+                (message,),
+            )
+
+    def cache_state(self):
+        """Cheap metadata row (no payload), so callers can tell whether to re-read it."""
+        return self.db.execute(
+            "SELECT loaded_at, stale_groups, last_error FROM schedule_cache WHERE id=1"
+        ).fetchone()
+
+    def load_schedules(
+        self, valid_from: date | None = None, valid_until: date | None = None
+    ) -> dict[str, GroupSchedule]:
+        row = self.db.execute("SELECT payload FROM schedule_cache WHERE id=1").fetchone()
+        if row is None:
+            return {}
+        return {
+            name: GroupSchedule.from_dict(data, valid_from, valid_until)
+            for name, data in json.loads(row["payload"]).items()
+        }
+
     def collect_changes(self, schedules: dict[str, GroupSchedule]) -> int:
         count = 0
         with self.db:
@@ -173,6 +222,7 @@ class Store:
                         changed=True,
                         as_html=True,
                         lang=lang,
+                        previous=tuple(Lesson.from_dict(item) for item in before.get(key, [])),
                     )
                     if key.startswith("w:"):
                         text += "\n\n" + t(lang, "weekly_change_note")
