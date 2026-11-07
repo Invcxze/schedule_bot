@@ -26,8 +26,8 @@ private_google_sheet = false
 # Explicit allowlist: NEVER mix archive copies and different semester blocks.
 # A group present on more than one listed sheet is merged (union of lessons),
 # not rejected — some groups have core courses on one sheet and
-# program-specific electives on another (e.g. "1st block common" + "Ru Programs").
-sheet_names = ["1st block common", "Ru Programs"]
+# program-specific electives on another (e.g. "2nd block common" + "Ru Programs").
+sheet_names = ["2nd block common", "Ru Programs"]
 header_row = 2
 lesson_rows = 3
 # Whole-cell group pattern, not a substring search. The count in brackets is ignored.

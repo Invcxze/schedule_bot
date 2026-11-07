@@ -17,6 +17,11 @@ def test_google_sheet_env_overrides_local_file(monkeypatch):
     assert settings.google_sheet_id == "14JhWp5BPsjkuC4PFAls1yzK4pxqSMeetLdSgNqL1QM8"
 
 
+def test_example_config_uses_current_schedule_sheets():
+    settings = load_settings(EXAMPLE_CONFIG, need_token=False)
+    assert settings.parser.sheet_names == ("2nd block common", "Ru Programs")
+
+
 def test_owner_user_id_defaults_to_none():
     assert load_settings(EXAMPLE_CONFIG, need_token=False).owner_user_id is None
 
