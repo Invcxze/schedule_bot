@@ -32,6 +32,10 @@ class Lesson:
     def to_dict(self) -> dict[str, str]:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, data: dict[str, str]) -> "Lesson":
+        return cls(**data)
+
 
 @dataclass(frozen=True)
 class GroupSchedule:
@@ -57,6 +61,29 @@ class GroupSchedule:
             day: [lesson.to_dict() for lesson in lessons]
             for day, lessons in sorted(self.days.items())
         }
+
+    def to_dict(self) -> dict[str, object]:
+        """Cache form. The validity period is deliberately left out: it comes from
+        the config, so a config change applies to cached data immediately."""
+        return {"group": self.group, "sheets": list(self.sheets), "days": self.snapshot()}
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: dict[str, object],
+        valid_from: date | None = None,
+        valid_until: date | None = None,
+    ) -> "GroupSchedule":
+        return cls(
+            data["group"],
+            tuple(data["sheets"]),
+            {
+                day: tuple(Lesson.from_dict(lesson) for lesson in lessons)
+                for day, lessons in data["days"].items()
+            },
+            valid_from,
+            valid_until,
+        )
 
 
 def day_label(key: str, lang: str = "ru") -> str:

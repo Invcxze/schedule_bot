@@ -10,11 +10,12 @@ from dotenv import load_dotenv
 
 from .bot import create_router
 from .config import load_settings
+from .contacts import ContactBook
 from .formatting import format_all, format_date
 from .logs import attach_file_handler, log_file
 from .models import normalize_group
 from .monitor import Sender
-from .source import ScheduleService, Source
+from .source import CachedSchedules, ScheduleService, Source
 from .storage import Store
 
 
@@ -24,11 +25,15 @@ async def run(settings):
     `celery -A schedule_bot.celery_app worker -B`.
     """
     store = Store(settings.database_path)
-    service = ScheduleService(Source(settings), settings)
+    # Answers come from the cache the Celery worker keeps fresh; a live fetch only
+    # happens if nothing has been cached yet (see CachedSchedules).
+    service = CachedSchedules(store, settings, ScheduleService(Source(settings), settings))
     bot = Bot(settings.token)
     sender = Sender(bot)
     dispatcher = Dispatcher()
-    dispatcher.include_router(create_router(settings, service, store, sender))
+    dispatcher.include_router(
+        create_router(settings, service, store, sender, ContactBook(settings.contacts_path))
+    )
     try:
         await bot.set_my_commands(
             [
@@ -39,6 +44,7 @@ async def run(settings):
                     ("tomorrow", "Пары завтра"),
                     ("all", "Всё расписание"),
                     ("groups", "Список групп"),
+                    ("contacts", "Контакты преподавателей и ТА"),
                     ("morning", "Утренняя рассылка вкл/выкл"),
                     ("subscribe", "Включить уведомления"),
                     ("unsubscribe", "Отключить уведомления"),

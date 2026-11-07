@@ -4,6 +4,8 @@ cache_ttl_seconds = 60
 # Every day at this local time, chats that ran /morning on get today+tomorrow.
 morning_digest_time = "08:00"
 database_path = "data/bot.sqlite3"
+# Professor/TA contacts for /contacts (see contacts.example.toml). Optional.
+contacts_file = "contacts.toml"
 # Restrict changing a group's subscription to Telegram chat administrators.
 group_admins_only = true
 # Telegram user ID allowed to run /log (tails data/bot.log + data/celery.log).
@@ -24,8 +26,8 @@ private_google_sheet = false
 # Explicit allowlist: NEVER mix archive copies and different semester blocks.
 # A group present on more than one listed sheet is merged (union of lessons),
 # not rejected — some groups have core courses on one sheet and
-# program-specific electives on another (e.g. "1st block common" + "Ru Programs").
-sheet_names = ["1st block common", "Ru Programs"]
+# program-specific electives on another (e.g. "2nd block common" + "Ru Programs").
+sheet_names = ["2nd block common", "Ru Programs"]
 header_row = 2
 lesson_rows = 3
 # Whole-cell group pattern, not a substring search. The count in brackets is ignored.

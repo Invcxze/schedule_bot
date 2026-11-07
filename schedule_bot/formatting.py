@@ -14,6 +14,56 @@ def _text(value: str, as_html: bool) -> str:
     return escape(value) if as_html else value
 
 
+# (mark, changed fields). mark: None = unchanged, else "new" | "changed" | "cancelled".
+Mark = tuple[str, tuple[str, ...]] | None
+_LESSON_FIELDS = (
+    ("end", "field_time"),
+    ("subject", "field_subject"),
+    ("teacher", "field_teacher"),
+    ("room", "field_room"),
+)
+
+
+def diff_day(before: tuple[Lesson, ...], after: tuple[Lesson, ...]) -> list[tuple[Lesson, Mark]]:
+    """Every lesson of the new day in time order, each marked against the old day.
+
+    A new lesson that starts where an old one (no longer present) started counts as
+    that lesson edited, and reports which fields differ; a moved lesson therefore
+    shows as cancelled at its old time plus new at the new one. Old lessons with no
+    counterpart are kept, marked cancelled, so a removal is visible rather than silent.
+    """
+    before_set, after_set = set(before), set(after)
+    entries: list[tuple[Lesson, Mark]] = [
+        (lesson, None) for lesson in after if lesson in before_set
+    ]
+    gone = [lesson for lesson in before if lesson not in after_set]
+    for lesson in (lesson for lesson in after if lesson not in before_set):
+        same_start = [old for old in gone if old.start == lesson.start]
+        match = next((old for old in same_start if old.subject == lesson.subject), None) or (
+            same_start[0] if same_start else None
+        )
+        if match is None:
+            entries.append((lesson, ("new", ())))
+            continue
+        gone.remove(match)
+        fields = tuple(
+            label for attr, label in _LESSON_FIELDS if getattr(match, attr) != getattr(lesson, attr)
+        )
+        entries.append((lesson, ("changed", fields)))
+    entries.extend((old, ("cancelled", ())) for old in gone)
+    return sorted(entries, key=lambda entry: (entry[0].start, entry[0].end))
+
+
+def _badge(mark: Mark, lang: str) -> str:
+    if mark is None:
+        return ""
+    kind, fields = mark
+    text = t(lang, f"lesson_{kind}")
+    if fields:
+        text += ": " + ", ".join(t(lang, field) for field in fields)
+    return text
+
+
 def format_day(
     group: str,
     key: str,
@@ -22,7 +72,10 @@ def format_day(
     changed=False,
     as_html=False,
     lang=DEFAULT_LANGUAGE,
+    previous: tuple[Lesson, ...] | None = None,
 ) -> str:
+    """`previous` (only with changed=True) is the same day before the edit; when
+    given, each lesson is marked new / edited (with what changed) / cancelled."""
     icon = "🔔" if changed else "📅"
     title_key = "title_changed" if changed else "title_schedule"
     title = f"{icon} {t(lang, title_key)}"
@@ -33,13 +86,27 @@ def format_day(
     lines = [header, subheader]
     if not lessons:
         lines.append(t(lang, "no_lessons") if not changed else t(lang, "no_lessons_changed"))
-    for lesson in lessons:
+    if changed and previous is not None:
+        entries = diff_day(previous, lessons)
+    else:
+        entries = [(lesson, None) for lesson in lessons]
+    for lesson, mark in entries:
+        cancelled = mark is not None and mark[0] == "cancelled"
+        badge = _badge(mark, lang)
         time_range = f"{lesson.start}–{lesson.end}"
         subject = _text(lesson.subject, as_html)
         if as_html:
-            lines.extend(("", f"🕒 <code>{time_range}</code> · <b>{subject}</b>"))
+            head = f"🕒 <code>{time_range}</code> · <b>{subject}</b>"
+            if cancelled:
+                head = f"<s>{head}</s>"
+            if badge:
+                head += f" — {badge}"
+            lines.extend(("", head))
         else:
-            lines.extend(("", f"{time_range} · {lesson.subject}"))
+            head = f"{time_range} · {lesson.subject}"
+            lines.extend(("", f"{head} — {badge}" if badge else head))
+        if cancelled:
+            continue  # Its old teacher/room would only clutter a lesson that no longer happens.
         if lesson.teacher:
             teacher = _text(lesson.teacher, as_html)
             label = t(lang, "teacher_label")

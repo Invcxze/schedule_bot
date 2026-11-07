@@ -21,6 +21,7 @@ _HELP_RU = """Привет! Покажу расписание группы и с
 /morning on|off — утренняя рассылка сегодня+завтра в {digest_time}
 /morning at ЧЧ:ММ — своё время рассылки для этого чата
 /language ru|en — язык ответов бота в этом чате
+/contacts [группа|имя] — контакты преподавателей и ТА группы (или поиск по имени)
 /status — группа, подписка и время загрузки
 
 Группу, рассылку и язык может менять только администратор беседы (в ЛС — сам
@@ -45,6 +46,7 @@ _HELP_EN = """Hi! I show a group's class schedule and tell you when it changes.
 /morning on|off — daily today+tomorrow digest at {digest_time}
 /morning at HH:MM — this chat's own digest time
 /language ru|en — language the bot replies in for this chat
+/contacts [group|name] — professor and TA contacts for a group (or search by name)
 /status — group, subscription and last-load status
 
 Only a group admin can change the group, digest, or language here (in a DM,
@@ -159,6 +161,20 @@ _STRINGS: dict[str, dict[str, object]] = {
         "log_invalid_count": "Укажи число строк, например /log 100.",
         "log_empty": "Логов пока нет.",
         "log_title": "Последние строки лога ({count})",
+        "lesson_new": "🆕 новая",
+        "lesson_changed": "✏️ изменено",
+        "lesson_cancelled": "❌ отменена",
+        "field_time": "время",
+        "field_subject": "предмет",
+        "field_teacher": "преподаватель",
+        "field_room": "аудитория",
+        "contacts_title": "Контакты",
+        "contacts_professors": "Преподаватели",
+        "contacts_tas": "Ассистенты (ТА)",
+        "contacts_missing": "Нет в списке контактов: {names}",
+        "contacts_not_configured": "Контакты не настроены: нет файла contacts.toml.",
+        "contacts_none_for_group": "Для группы {group} в списке контактов никого нет.",
+        "contacts_none_found": "Ничего не найдено по запросу «{query}».",
     },
     "en": {
         "language_name_ru": "Russian",
@@ -259,6 +275,20 @@ _STRINGS: dict[str, dict[str, object]] = {
         "log_invalid_count": "Give a line count, e.g. /log 100.",
         "log_empty": "No logs yet.",
         "log_title": "Latest log lines ({count})",
+        "lesson_new": "🆕 new",
+        "lesson_changed": "✏️ changed",
+        "lesson_cancelled": "❌ cancelled",
+        "field_time": "time",
+        "field_subject": "subject",
+        "field_teacher": "teacher",
+        "field_room": "room",
+        "contacts_title": "Contacts",
+        "contacts_professors": "Professors",
+        "contacts_tas": "Teaching assistants",
+        "contacts_missing": "Not in the contacts list: {names}",
+        "contacts_not_configured": "Contacts aren't set up: there is no contacts.toml file.",
+        "contacts_none_for_group": "Nobody in the contacts list is attached to group {group}.",
+        "contacts_none_found": "Nothing found for \u201c{query}\u201d.",
     },
 }
 

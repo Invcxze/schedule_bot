@@ -22,6 +22,8 @@ services:
     volumes:
       - ./config.toml:/app/config.toml:ro
       - bot-data:/app/data
+      # Contacts for /contacts (create the file first, or Docker makes a directory):
+      # - ./contacts.toml:/app/contacts.toml:ro
       # For local Excel, add its mount and set source.local_file to /app/schedule.xlsx:
       # - /absolute/path/schedule.xlsx:/app/schedule.xlsx:ro
       # Private Google Sheet: also mount your service-account file read-only.
